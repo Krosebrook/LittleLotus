@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AppMode, ChatMessage } from '../types';
 import { chatWithBot } from '../services/geminiService';
-import { MessageCircle, Send, X, Bot, Mic, MicOff } from 'lucide-react';
+import { MessageCircle, Send, X, Bot, Mic, MicOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 interface ChatBotProps {
@@ -27,6 +28,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleSpeechResult = useCallback((text: string) => {
@@ -35,15 +37,26 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
       const spacing = prev.length > 0 && !prev.endsWith(' ') ? ' ' : '';
       return prev + spacing + text;
     });
+    setVoiceError(null);
   }, []);
 
-  const handleSpeechError = useCallback((error: any) => {
+  const handleSpeechError = useCallback((error: string) => {
+    let msg = '';
     if (error === 'not-allowed') {
-      alert('Please allow microphone access to use voice input.');
+      msg = 'Microphone access denied.';
     } else if (error === 'not-supported') {
-      alert('Voice input is not supported in this browser.');
+      msg = 'Voice input not supported.';
+    } else if (error === 'no-speech') {
+      // User didn't say anything, just reset silently or show prompt
+      return; 
     } else {
-      console.error('Voice input error:', error);
+      msg = 'Error hearing voice.';
+      console.warn('Voice input error:', error);
+    }
+    
+    if (msg) {
+      setVoiceError(msg);
+      setTimeout(() => setVoiceError(null), 3000);
     }
   }, []);
 
@@ -135,7 +148,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -163,7 +176,16 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-white border-t border-slate-100">
+      <div className="p-4 bg-white border-t border-slate-100 relative">
+        
+        {/* Voice Error Notification */}
+        {voiceError && (
+          <div className="absolute -top-10 left-4 right-4 bg-red-100 text-red-600 text-xs px-3 py-2 rounded-lg shadow-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+            <AlertCircle size={14} />
+            {voiceError}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             onClick={toggleListening}
@@ -177,6 +199,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
           >
             {isListening ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
+          
           <input
             type="text"
             value={input}
@@ -190,6 +213,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
             }`}
             aria-label="Message Input"
           />
+          
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}

@@ -1,6 +1,8 @@
+
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { ImageSize, VoiceName } from "../types";
 import { atobHelper, decodeAudioData } from "../utils/audio";
+import { buildMeditationScriptPrompt, getChatSystemInstruction } from "../utils/prompts";
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -21,23 +23,7 @@ export const generateMeditationScript = async (
   visualStyle: string,
   duration: string
 ): Promise<{ title: string; script: string; visualPrompt: string }> => {
-  const isKid = ageGroup !== "Adult";
-  const prompt = `
-    You are an expert meditation guide and content creator for ${isKid ? 'children' : 'adults'}.
-    Create a custom guided meditation session.
-    
-    Target Audience Age: ${ageGroup}
-    Goal/Mood: ${mood}
-    Visual Theme: ${visualStyle}
-    Duration: ${duration}
-    
-    Return the response in JSON format with the following schema:
-    {
-      "title": "A creative title for the session",
-      "script": "The full meditation script, written to be spoken. Approx ${duration === 'Short' ? '150' : '300'} words.",
-      "visualPrompt": "A detailed image generation prompt describing a scene that matches the script and visual theme. Focus on lighting, atmosphere, and style."
-    }
-  `;
+  const prompt = buildMeditationScriptPrompt(ageGroup, mood, visualStyle, duration);
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
@@ -140,9 +126,7 @@ export const chatWithBot = async (
   history: { role: 'user' | 'model'; text: string }[],
   isKid: boolean
 ): Promise<string> => {
-  const systemInstruction = isKid 
-    ? "You are a friendly, magical meditation buddy. Keep answers short, encouraging, and use simple language. Use emojis!" 
-    : "You are a professional meditation coach. Provide helpful, calming advice about mindfulness and stress relief.";
+  const systemInstruction = getChatSystemInstruction(isKid);
 
   const chat = ai.chats.create({
     model: 'gemini-3-pro-preview',

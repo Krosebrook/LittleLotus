@@ -1,10 +1,17 @@
+
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  /** Visual style variant of the button */
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'kid';
+  /** If true, shows a loading spinner and disables interaction */
   isLoading?: boolean;
 }
 
+/**
+ * Reusable Button component with multiple visual variants.
+ * Handles loading states and disabled interactions automatically.
+ */
 export const Button: React.FC<ButtonProps> = ({ 
   children, 
   variant = 'primary', 
@@ -27,11 +34,12 @@ export const Button: React.FC<ButtonProps> = ({
     <button 
       className={`${baseStyles} ${variants[variant]} ${isLoading || disabled ? 'opacity-70 cursor-not-allowed' : ''} ${className}`}
       disabled={isLoading || disabled}
+      aria-busy={isLoading}
       {...props}
     >
       {isLoading ? (
         <>
-          <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+          <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24" aria-hidden="true">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>

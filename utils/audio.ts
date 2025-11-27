@@ -1,16 +1,34 @@
+
+/**
+ * Interface extension to support vendor-prefixed AudioContext.
+ */
+interface WindowWithAudio extends Window {
+  webkitAudioContext?: typeof AudioContext;
+  // Fix: Explicitly define AudioContext on the interface to avoid TS error
+  AudioContext?: typeof AudioContext;
+}
+
 /**
  * Creates and returns a new AudioContext instance.
  * Handles browser prefixes if necessary (e.g., webkitAudioContext).
+ * 
  * @returns {AudioContext} The created AudioContext.
  */
 export const getAudioContext = (): AudioContext => {
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const win = window as unknown as WindowWithAudio;
+  const AudioContextClass = win.AudioContext || win.webkitAudioContext;
+  
+  if (!AudioContextClass) {
+    throw new Error("Web Audio API is not supported in this browser.");
+  }
+  
   return new AudioContextClass();
 };
 
 /**
  * Decodes a base64 encoded string into a Uint8Array.
  * Useful for processing binary data received from APIs.
+ * 
  * @param {string} base64 - The base64 string to decode.
  * @returns {Uint8Array} The decoded byte array.
  */
@@ -27,6 +45,7 @@ export function atobHelper(base64: string): Uint8Array {
 /**
  * Decodes raw PCM audio data into an AudioBuffer.
  * This is specific to the raw PCM format returned by some Gemini models.
+ * 
  * @param {Uint8Array} data - The raw audio data (PCM).
  * @param {AudioContext} ctx - The AudioContext to use for decoding.
  * @param {number} [sampleRate=24000] - The sample rate of the audio data.

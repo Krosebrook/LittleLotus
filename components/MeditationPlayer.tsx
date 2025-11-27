@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { MeditationSession, AppMode } from '../types';
 import { Play, Pause, X, RefreshCw, SkipBack, SkipForward, RotateCcw } from 'lucide-react';
@@ -10,6 +11,81 @@ interface MeditationPlayerProps {
   onClose: () => void;
   audioContext: AudioContext;
 }
+
+// --- Sub-Components ---
+
+const KidControls: React.FC<{
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  onRestart: () => void;
+  onSeek: (seconds: number) => void;
+}> = ({ isPlaying, onTogglePlay, onRestart, onSeek }) => (
+  <div className="flex justify-center items-center gap-4 md:gap-6">
+    <button 
+      onClick={onRestart} 
+      className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-amber-100 text-amber-700 border-2 border-amber-200 hover:bg-amber-200 hover:scale-105 active:scale-95 transition-all shadow-[0_4px_0_rgb(217,119,6,0.2)] flex flex-col items-center justify-center"
+      title="Start Over"
+      aria-label="Restart session"
+    >
+      <RotateCcw size={32} strokeWidth={3} />
+    </button>
+
+    <button 
+      onClick={() => onSeek(-10)} 
+      className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
+      title="Back 10 seconds"
+      aria-label="Rewind 10 seconds"
+    >
+      <SkipBack size={40} strokeWidth={3} />
+    </button>
+
+    <Button 
+       variant='kid' 
+       className="rounded-full w-32 h-32 md:w-40 md:h-40 p-0 flex items-center justify-center shadow-[0_10px_0_rgb(217,119,6)] active:shadow-none active:translate-y-2 hover:scale-105 transition-transform z-10"
+       onClick={onTogglePlay}
+       aria-label={isPlaying ? "Pause" : "Play"}
+    >
+       {isPlaying ? <Pause size={64} fill="currentColor" /> : <Play size={64} fill="currentColor" className="ml-3" />}
+    </Button>
+
+    <button 
+      onClick={() => onSeek(10)} 
+      className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
+      title="Forward 10 seconds"
+      aria-label="Fast forward 10 seconds"
+    >
+      <SkipForward size={40} strokeWidth={3} />
+    </button>
+  </div>
+);
+
+const AdultControls: React.FC<{
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  onRestart: () => void;
+}> = ({ isPlaying, onTogglePlay, onRestart }) => (
+  <div className="flex justify-center items-center gap-6">
+    <Button 
+       variant='primary' 
+       className="rounded-full w-16 h-16 p-0 flex items-center justify-center shadow-lg hover:shadow-xl"
+       onClick={onTogglePlay}
+       aria-label={isPlaying ? "Pause" : "Play"}
+    >
+       {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+    </Button>
+    
+    <button 
+      onClick={onRestart}
+      className="p-4 rounded-full text-slate-500 hover:bg-slate-100 transition-colors"
+      title="Restart"
+      aria-label="Restart session"
+    >
+      <RefreshCw size={24} />
+    </button>
+  </div>
+);
+
+// --- Main Component ---
 
 /**
  * Component for playing back the meditation session (audio + visual).
@@ -70,69 +146,20 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, mod
                />
              </div>
 
-             {/* Controls */}
+             {/* Mode-Specific Controls */}
              {isKid ? (
-                <div className="flex justify-center items-center gap-4 md:gap-6">
-                  {/* Repeat */}
-                  <button 
-                    onClick={restart} 
-                    className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-amber-100 text-amber-700 border-2 border-amber-200 hover:bg-amber-200 hover:scale-105 active:scale-95 transition-all shadow-[0_4px_0_rgb(217,119,6,0.2)] flex flex-col items-center justify-center"
-                    title="Start Over"
-                    aria-label="Restart session"
-                  >
-                    <RotateCcw size={32} strokeWidth={3} />
-                  </button>
-
-                  {/* Skip Back */}
-                  <button 
-                    onClick={() => seek(-10)} 
-                    className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
-                    title="Back 10 seconds"
-                    aria-label="Rewind 10 seconds"
-                  >
-                    <SkipBack size={40} strokeWidth={3} />
-                  </button>
-
-                  {/* Big Play/Pause */}
-                  <Button 
-                     variant='kid' 
-                     className="rounded-full w-32 h-32 md:w-40 md:h-40 p-0 flex items-center justify-center shadow-[0_10px_0_rgb(217,119,6)] active:shadow-none active:translate-y-2 hover:scale-105 transition-transform z-10"
-                     onClick={togglePlay}
-                     aria-label={isPlaying ? "Pause" : "Play"}
-                  >
-                     {isPlaying ? <Pause size={64} fill="currentColor" /> : <Play size={64} fill="currentColor" className="ml-3" />}
-                  </Button>
-
-                  {/* Skip Forward */}
-                  <button 
-                    onClick={() => seek(10)} 
-                    className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
-                    title="Forward 10 seconds"
-                    aria-label="Fast forward 10 seconds"
-                  >
-                    <SkipForward size={40} strokeWidth={3} />
-                  </button>
-                </div>
+               <KidControls 
+                 isPlaying={isPlaying} 
+                 onTogglePlay={togglePlay} 
+                 onRestart={restart} 
+                 onSeek={seek} 
+               />
              ) : (
-                <div className="flex justify-center items-center gap-6">
-                  <Button 
-                     variant='primary' 
-                     className="rounded-full w-16 h-16 p-0 flex items-center justify-center shadow-lg hover:shadow-xl"
-                     onClick={togglePlay}
-                     aria-label={isPlaying ? "Pause" : "Play"}
-                  >
-                     {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
-                  </Button>
-                  
-                  <button 
-                    onClick={restart}
-                    className="p-4 rounded-full text-slate-500 hover:bg-slate-100 transition-colors"
-                    title="Restart"
-                    aria-label="Restart session"
-                  >
-                    <RefreshCw size={24} />
-                  </button>
-                </div>
+               <AdultControls 
+                 isPlaying={isPlaying} 
+                 onTogglePlay={togglePlay} 
+                 onRestart={restart} 
+               />
              )}
            </div>
         </div>

@@ -1,27 +1,30 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
 
-// Extend the Window interface to include SpeechRecognition types
-interface IWindow extends Window {
-  webkitSpeechRecognition: any;
-  SpeechRecognition: any;
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ISpeechRecognition, ISpeechRecognitionEvent, ISpeechRecognitionErrorEvent } from '../types';
+
+// Extend Window interface locally to include SpeechRecognition constructors
+interface WindowWithSpeech extends Window {
+  webkitSpeechRecognition?: new () => ISpeechRecognition;
+  SpeechRecognition?: new () => ISpeechRecognition;
 }
 
 interface UseSpeechRecognitionProps {
+  /** Callback triggered when speech is successfully transcribed. */
   onResult: (text: string) => void;
-  onError?: (error: any) => void;
+  /** Callback triggered when a recognition error occurs. */
+  onError?: (error: string) => void;
 }
 
 /**
  * Custom hook for using the Web Speech API (SpeechRecognition).
- * Handles browser compatibility and listening state.
+ * Handles browser compatibility, listening state, and strict typing.
  * 
- * @param {Function} onResult - Callback when speech is successfully recognized.
- * @param {Function} onError - Callback when an error occurs (e.g., permissions).
- * @returns {Object} { isListening, toggleListening }
+ * @param {UseSpeechRecognitionProps} props - Configuration props.
+ * @returns {Object} An object containing the listening state and a toggle function.
  */
 export const useSpeechRecognition = ({ onResult, onError }: UseSpeechRecognitionProps) => {
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -33,6 +36,7 @@ export const useSpeechRecognition = ({ onResult, onError }: UseSpeechRecognition
   }, []);
 
   const toggleListening = useCallback(() => {
+    // If currently listening, stop the recognition
     if (isListening) {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -40,8 +44,8 @@ export const useSpeechRecognition = ({ onResult, onError }: UseSpeechRecognition
       return;
     }
 
-    const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
-    const SpeechRecognitionConstructor = SpeechRecognition || webkitSpeechRecognition;
+    const win = window as unknown as WindowWithSpeech;
+    const SpeechRecognitionConstructor = win.SpeechRecognition || win.webkitSpeechRecognition;
 
     if (!SpeechRecognitionConstructor) {
       onError?.("not-supported");
@@ -56,7 +60,7 @@ export const useSpeechRecognition = ({ onResult, onError }: UseSpeechRecognition
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
     
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: ISpeechRecognitionEvent) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -68,8 +72,8 @@ export const useSpeechRecognition = ({ onResult, onError }: UseSpeechRecognition
       }
     };
 
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
+    recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", event.error);
       setIsListening(false);
       onError?.(event.error);
     };
