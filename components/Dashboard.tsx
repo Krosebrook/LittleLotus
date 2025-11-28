@@ -1,16 +1,10 @@
 
 import React from 'react';
-import { AppMode, MeditationSession } from '../types';
 import { Button } from './Button';
 import { Moon } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 interface DashboardProps {
-  /** Current application mode */
-  mode: AppMode;
-  /** List of created sessions */
-  sessions: MeditationSession[];
-  /** Callback when a session is selected */
-  onSessionSelect: (session: MeditationSession) => void;
   /** Callback to trigger creation of a new session */
   onCreateNew: () => void;
 }
@@ -18,8 +12,8 @@ interface DashboardProps {
 /**
  * Dashboard component displaying user stats (adult only) and the grid of recent meditation sessions.
  */
-export const Dashboard: React.FC<DashboardProps> = ({ mode, sessions, onSessionSelect, onCreateNew }) => {
-  const isKid = mode === AppMode.Kid;
+export const Dashboard: React.FC<DashboardProps> = ({ onCreateNew }) => {
+  const { isKid, sessions, setActiveSession } = useApp();
 
   return (
     <div className="space-y-10">
@@ -57,7 +51,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ mode, sessions, onSessionS
             {sessions.map(session => (
               <div 
                 key={session.id} 
-                onClick={() => onSessionSelect(session)}
+                onClick={() => setActiveSession(session)}
                 className={`group cursor-pointer rounded-2xl overflow-hidden transition-all hover:shadow-xl ${
                   isKid ? 'bg-white shadow-[4px_4px_0px_#f59e0b] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#f59e0b]' : 'bg-white shadow-md hover:shadow-lg'
                 }`}

@@ -1,3 +1,4 @@
+
 import { AppMode, VoiceName } from "./types";
 
 /**
@@ -25,7 +26,9 @@ export const VOICES = {
     VoiceName.Zephyr,
     VoiceName.Aoede,
     VoiceName.Leto,
-    VoiceName.Leda
+    VoiceName.Leda,
+    VoiceName.Kore,
+    VoiceName.Mnemosyne
   ],
   [AppMode.Adult]: [
     VoiceName.Kore,
@@ -34,7 +37,11 @@ export const VOICES = {
     VoiceName.Orpheus,
     VoiceName.Iapetus,
     VoiceName.Mnemosyne,
-    VoiceName.Puck
+    VoiceName.Puck,
+    VoiceName.Zephyr,
+    VoiceName.Leda,
+    VoiceName.Aoede,
+    VoiceName.Leto
   ]
 };
 
@@ -42,15 +49,15 @@ export const VOICES = {
  * Descriptions for the voice personas to help users choose styles/accents.
  */
 export const VOICE_DESCRIPTIONS: Record<VoiceName, string> = {
-  [VoiceName.Puck]: "Playful & Witty",
+  [VoiceName.Puck]: "Playful & Energetic",
   [VoiceName.Charon]: "Deep & Authoritative",
   [VoiceName.Kore]: "Calm & Soothing",
   [VoiceName.Fenrir]: "Deep & Resonant",
   [VoiceName.Zephyr]: "Gentle & Warm",
-  [VoiceName.Aoede]: "Expressive & Elegant",
+  [VoiceName.Aoede]: "Expressive & Bright",
   [VoiceName.Leda]: "Soft & Nurturing",
   [VoiceName.Orpheus]: "Confident & Rich",
-  [VoiceName.Iapetus]: "Deep & Grounded",
+  [VoiceName.Iapetus]: "Grounded & Steady",
   [VoiceName.Leto]: "Peaceful & Serene",
   [VoiceName.Mnemosyne]: "Clear & Articulate"
 };

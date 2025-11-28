@@ -1,18 +1,18 @@
 
 /**
- * Interface extension to support vendor-prefixed AudioContext.
+ * Interface extension to support vendor-prefixed AudioContext for legacy browser support.
  */
 interface WindowWithAudio extends Window {
   webkitAudioContext?: typeof AudioContext;
-  // Fix: Explicitly define AudioContext on the interface to avoid TS error
   AudioContext?: typeof AudioContext;
 }
 
 /**
  * Creates and returns a new AudioContext instance.
- * Handles browser prefixes if necessary (e.g., webkitAudioContext).
+ * Checks for standard `AudioContext` and legacy `webkitAudioContext`.
  * 
- * @returns {AudioContext} The created AudioContext.
+ * @returns {AudioContext} The initialized AudioContext.
+ * @throws {Error} If the Web Audio API is not supported in the current environment.
  */
 export const getAudioContext = (): AudioContext => {
   const win = window as unknown as WindowWithAudio;
@@ -26,8 +26,8 @@ export const getAudioContext = (): AudioContext => {
 };
 
 /**
- * Decodes a base64 encoded string into a Uint8Array.
- * Useful for processing binary data received from APIs.
+ * Helper utility to decode a base64 encoded string into a Uint8Array.
+ * Used to convert the raw API response data into a binary buffer.
  * 
  * @param {string} base64 - The base64 string to decode.
  * @returns {Uint8Array} The decoded byte array.
@@ -43,14 +43,15 @@ export function atobHelper(base64: string): Uint8Array {
 }
 
 /**
- * Decodes raw PCM audio data into an AudioBuffer.
- * This is specific to the raw PCM format returned by some Gemini models.
+ * Decodes raw PCM (Pulse Code Modulation) audio data into a Web Audio API AudioBuffer.
+ * The Gemini API returns raw 16-bit signed integer PCM data which must be normalized
+ * to floating point numbers between -1.0 and 1.0 for the Web Audio API.
  * 
- * @param {Uint8Array} data - The raw audio data (PCM).
- * @param {AudioContext} ctx - The AudioContext to use for decoding.
- * @param {number} [sampleRate=24000] - The sample rate of the audio data.
- * @param {number} [numChannels=1] - The number of channels in the audio data.
- * @returns {Promise<AudioBuffer>} A promise that resolves to the decoded AudioBuffer.
+ * @param {Uint8Array} data - The raw PCM audio data (little-endian 16-bit integers).
+ * @param {AudioContext} ctx - The AudioContext used to create the buffer.
+ * @param {number} [sampleRate=24000] - The sample rate of the audio data (Default: 24kHz for Gemini).
+ * @param {number} [numChannels=1] - The number of audio channels (Default: 1 for Mono).
+ * @returns {Promise<AudioBuffer>} A promise that resolves to the playable AudioBuffer.
  */
 export async function decodeAudioData(
   data: Uint8Array,
@@ -65,6 +66,7 @@ export async function decodeAudioData(
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
+      // Normalize 16-bit integer (-32768 to 32767) to float (-1.0 to 1.0)
       channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
   }

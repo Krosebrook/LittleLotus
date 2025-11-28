@@ -1,99 +1,69 @@
-
-import React from 'react';
-import { MeditationSession, AppMode } from '../types';
-import { Play, Pause, X, RefreshCw, SkipBack, SkipForward, RotateCcw } from 'lucide-react';
-import { Button } from './Button';
+import React, { useState, useEffect } from 'react';
+import { MeditationSession } from '../types';
+import { X, Wind } from 'lucide-react';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
+import { useApp } from '../context/AppContext';
+import { KidControls, AdultControls } from './PlayerControls';
 
 interface MeditationPlayerProps {
   session: MeditationSession;
-  mode: AppMode;
   onClose: () => void;
-  audioContext: AudioContext;
 }
 
-// --- Sub-Components ---
+/**
+ * Sub-component for the breathing animation.
+ * Cycles between "Breathe In" and "Breathe Out" with a scaling visual.
+ */
+const BreathingBubble: React.FC = () => {
+  const [phase, setPhase] = useState<'in' | 'hold' | 'out'>('in');
+  
+  useEffect(() => {
+    // Simple 4-4-4 breathing rhythm loop
+    const breathe = () => {
+      setPhase('in');
+      setTimeout(() => {
+        setPhase('out');
+      }, 4000); // Breathe in for 4s
+    };
 
-const KidControls: React.FC<{
-  isPlaying: boolean;
-  onTogglePlay: () => void;
-  onRestart: () => void;
-  onSeek: (seconds: number) => void;
-}> = ({ isPlaying, onTogglePlay, onRestart, onSeek }) => (
-  <div className="flex justify-center items-center gap-4 md:gap-6">
-    <button 
-      onClick={onRestart} 
-      className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-amber-100 text-amber-700 border-2 border-amber-200 hover:bg-amber-200 hover:scale-105 active:scale-95 transition-all shadow-[0_4px_0_rgb(217,119,6,0.2)] flex flex-col items-center justify-center"
-      title="Start Over"
-      aria-label="Restart session"
-    >
-      <RotateCcw size={32} strokeWidth={3} />
-    </button>
+    breathe(); // Initial start
+    const interval = setInterval(breathe, 8000); // Loop every 8s
 
-    <button 
-      onClick={() => onSeek(-10)} 
-      className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
-      title="Back 10 seconds"
-      aria-label="Rewind 10 seconds"
-    >
-      <SkipBack size={40} strokeWidth={3} />
-    </button>
+    return () => clearInterval(interval);
+  }, []);
 
-    <Button 
-       variant='kid' 
-       className="rounded-full w-32 h-32 md:w-40 md:h-40 p-0 flex items-center justify-center shadow-[0_10px_0_rgb(217,119,6)] active:shadow-none active:translate-y-2 hover:scale-105 transition-transform z-10"
-       onClick={onTogglePlay}
-       aria-label={isPlaying ? "Pause" : "Play"}
-    >
-       {isPlaying ? <Pause size={64} fill="currentColor" /> : <Play size={64} fill="currentColor" className="ml-3" />}
-    </Button>
-
-    <button 
-      onClick={() => onSeek(10)} 
-      className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white border-4 border-kid-primary text-kid-primary hover:bg-sky-50 hover:scale-105 active:scale-95 transition-all shadow-[0_6px_0_rgb(14,165,233)] flex items-center justify-center"
-      title="Forward 10 seconds"
-      aria-label="Fast forward 10 seconds"
-    >
-      <SkipForward size={40} strokeWidth={3} />
-    </button>
-  </div>
-);
-
-const AdultControls: React.FC<{
-  isPlaying: boolean;
-  onTogglePlay: () => void;
-  onRestart: () => void;
-}> = ({ isPlaying, onTogglePlay, onRestart }) => (
-  <div className="flex justify-center items-center gap-6">
-    <Button 
-       variant='primary' 
-       className="rounded-full w-16 h-16 p-0 flex items-center justify-center shadow-lg hover:shadow-xl"
-       onClick={onTogglePlay}
-       aria-label={isPlaying ? "Pause" : "Play"}
-    >
-       {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
-    </Button>
-    
-    <button 
-      onClick={onRestart}
-      className="p-4 rounded-full text-slate-500 hover:bg-slate-100 transition-colors"
-      title="Restart"
-      aria-label="Restart session"
-    >
-      <RefreshCw size={24} />
-    </button>
-  </div>
-);
-
-// --- Main Component ---
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
+      <div 
+        className={`
+          relative flex items-center justify-center rounded-full transition-all duration-[4000ms] ease-in-out
+          ${phase === 'in' ? 'w-64 h-64 bg-kid-accent/80 scale-110' : 'w-32 h-32 bg-kid-primary/80 scale-100'}
+          shadow-[0_0_60px_rgba(255,255,255,0.3)] border-4 border-white/50
+        `}
+      >
+        <div className="text-white font-bold text-2xl font-rounded animate-pulse">
+          {phase === 'in' ? 'Breathe In... 🌸' : 'Breathe Out... 🌬️'}
+        </div>
+        
+        {/* Ripple Effect Rings */}
+        <div className={`absolute inset-0 rounded-full border-2 border-white/30 transition-all duration-[4000ms] ease-in-out ${phase === 'in' ? 'scale-150 opacity-0' : 'scale-100 opacity-50'}`} />
+        <div className={`absolute inset-0 rounded-full border-2 border-white/20 transition-all duration-[4000ms] ease-in-out delay-75 ${phase === 'in' ? 'scale-[2] opacity-0' : 'scale-100 opacity-50'}`} />
+      </div>
+    </div>
+  );
+};
 
 /**
  * Component for playing back the meditation session (audio + visual).
  * Features different layouts for Adult and Kid modes.
  */
-export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, mode, onClose, audioContext }) => {
-  const isKid = mode === AppMode.Kid;
-  const { isPlaying, progress, duration, togglePlay, seek, restart } = useAudioPlayer(audioContext, session.audioBuffer);
+export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onClose }) => {
+  const { isKid, audioContext } = useApp();
+  const [showBreathing, setShowBreathing] = useState(false);
+  
+  if (!audioContext) return null;
+
+  const { isPlaying, progress, duration, togglePlay, seek, restart, volume, setVolume } = useAudioPlayer(audioContext, session.audioBuffer);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="Meditation Player">
@@ -102,14 +72,14 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, mod
         {/* Close Button */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-black/20 hover:bg-black/40 rounded-full text-white backdrop-blur transition-all"
+          className="absolute top-4 right-4 z-30 p-2 bg-black/20 hover:bg-black/40 rounded-full text-white backdrop-blur transition-all"
           aria-label="Close player"
         >
           <X size={24} />
         </button>
 
         {/* Visual Side */}
-        <div className="w-full md:w-1/2 h-1/2 md:h-full relative bg-black">
+        <div className="w-full md:w-1/2 h-1/2 md:h-full relative bg-black group">
           {session.imageUrl && (
             <img 
               src={session.imageUrl} 
@@ -117,7 +87,25 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, mod
               className="w-full h-full object-cover opacity-90"
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-8">
+          
+          {/* Breathing Overlay */}
+          {showBreathing && <BreathingBubble />}
+
+          {/* Kid Mode: Breathing Toggle Button */}
+          {isKid && (
+            <button
+              onClick={() => setShowBreathing(!showBreathing)}
+              className={`
+                absolute top-4 left-4 z-30 flex items-center gap-2 px-4 py-2 rounded-full font-bold shadow-lg transition-all
+                ${showBreathing ? 'bg-white text-kid-primary' : 'bg-kid-primary/80 text-white hover:bg-kid-primary'}
+              `}
+            >
+              <Wind size={20} className={showBreathing ? 'animate-spin-slow' : ''} />
+              {showBreathing ? "Stop Breathing" : "Breathing Exercise"}
+            </button>
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-8 pointer-events-none">
              <h2 className="text-white text-3xl font-bold mb-2 shadow-black drop-shadow-md">{session.title}</h2>
              <p className="text-white/80 text-sm">{session.visualStyle} • {session.mood}</p>
           </div>
@@ -158,7 +146,9 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, mod
                <AdultControls 
                  isPlaying={isPlaying} 
                  onTogglePlay={togglePlay} 
-                 onRestart={restart} 
+                 onRestart={restart}
+                 volume={volume}
+                 onVolumeChange={setVolume}
                />
              )}
            </div>

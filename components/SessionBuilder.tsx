@@ -1,19 +1,22 @@
 
 import React, { useState } from 'react';
-import { AppMode, ImageSize, VoiceName, MeditationSession, SessionFormData } from '../types';
+import { ImageSize, VoiceName, SessionFormData } from '../types';
 import { Button } from './Button';
-import { generateMeditationScript, generateMeditationImage, generateMeditationAudio } from '../services/geminiService';
 import { Wand2, Image as ImageIcon, Music, Sparkles, LucideIcon } from 'lucide-react';
 import { MOODS, VISUAL_STYLES, VOICES, VOICE_DESCRIPTIONS } from '../constants';
+import { useApp } from '../context/AppContext';
+import { useSessionGenerator } from '../hooks/useSessionGenerator';
 
 interface SessionBuilderProps {
-  mode: AppMode;
-  onSessionCreated: (session: MeditationSession) => void;
-  audioContext: AudioContext;
+  /** Callback fired when the session generation is complete and stored */
+  onComplete: () => void;
 }
 
 // --- Sub-Components ---
 
+/**
+ * Displays a single step in the progress bar.
+ */
 const StepIndicator: React.FC<{ num: number; icon: LucideIcon; step: number; isKid: boolean }> = ({ num, icon: Icon, step, isKid }) => (
   <div 
     className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${step >= num ? (isKid ? 'bg-kid-primary border-kid-primary text-white' : 'bg-indigo-600 border-indigo-600 text-white') : 'border-slate-300 text-slate-300'}`}
@@ -23,6 +26,9 @@ const StepIndicator: React.FC<{ num: number; icon: LucideIcon; step: number; isK
   </div>
 );
 
+/**
+ * Displays the loading spinner and status message during generation.
+ */
 const LoadingView: React.FC<{ isKid: boolean; status: string }> = ({ isKid, status }) => (
   <div className="text-center py-20" role="status" aria-live="polite">
     <div className={`w-20 h-20 mx-auto mb-6 rounded-full border-4 border-t-transparent animate-spin ${isKid ? 'border-kid-primary' : 'border-indigo-600'}`} />
@@ -31,6 +37,9 @@ const LoadingView: React.FC<{ isKid: boolean; status: string }> = ({ isKid, stat
   </div>
 );
 
+/**
+ * Step 1: User selects their current mood or session goal.
+ */
 const MoodStep: React.FC<{
   isKid: boolean;
   moods: string[];
@@ -64,6 +73,9 @@ const MoodStep: React.FC<{
   </div>
 );
 
+/**
+ * Step 2: User selects visual style and image resolution.
+ */
 const VisualStep: React.FC<{
   isKid: boolean;
   visualStyles: string[];
@@ -122,6 +134,9 @@ const VisualStep: React.FC<{
   </div>
 );
 
+/**
+ * Step 3: User selects the narrator voice and confirms generation.
+ */
 const VoiceStep: React.FC<{
   isKid: boolean;
   voices: VoiceName[];
@@ -175,15 +190,19 @@ const VoiceStep: React.FC<{
 // --- Main Component ---
 
 /**
- * Component for creating new meditation sessions.
- * Handles the multi-step form wizard (Mood -> Visuals -> Voice) and API calls for generation.
+ * Main orchestration component for the Session Builder wizard.
+ * Manages the multi-step form state and delegates final generation to `useSessionGenerator`.
  */
-export const SessionBuilder: React.FC<SessionBuilderProps> = ({ mode, onSessionCreated, audioContext }) => {
-  const isKid = mode === AppMode.Kid;
+export const SessionBuilder: React.FC<SessionBuilderProps> = ({ onComplete }) => {
+  const { mode, isKid, addSession, setActiveSession, audioContext } = useApp();
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
+  const { generateSession, loading, status } = useSessionGenerator({ 
+    addSession, 
+    setActiveSession, 
+    audioContext 
+  });
 
+  // Default form state
   const [formData, setFormData] = useState<SessionFormData>({
     mood: '',
     visualStyle: '',
@@ -197,44 +216,16 @@ export const SessionBuilder: React.FC<SessionBuilderProps> = ({ mode, onSessionC
   const voices = VOICES[mode];
 
   const handleGenerate = async () => {
-    setLoading(true);
-    setStatus('Writing your meditation script...');
+    if (!audioContext) {
+      alert("Audio not ready. Please click anywhere on the page first.");
+      return;
+    }
+
     try {
-      // 1. Generate Script
-      const { title, script, visualPrompt } = await generateMeditationScript(
-        isKid ? "6-9" : "Adult",
-        formData.mood,
-        formData.visualStyle,
-        formData.duration
-      );
-
-      setStatus('Painting your unique visual...');
-      // 2. Generate Image
-      const imageUrl = await generateMeditationImage(visualPrompt, formData.imageSize);
-
-      setStatus('Recording the voiceover...');
-      // 3. Generate Audio
-      const audioBuffer = await generateMeditationAudio(script, formData.voice, audioContext);
-
-      onSessionCreated({
-        id: Date.now().toString(),
-        title,
-        script,
-        mood: formData.mood,
-        duration: formData.duration,
-        visualStyle: formData.visualStyle,
-        visualPrompt,
-        imageUrl,
-        audioBuffer,
-        createdAt: Date.now()
-      });
-
+      await generateSession(formData, isKid);
+      onComplete();
     } catch (error) {
-      console.error('Session generation failed:', error);
       alert('Something went wrong creating your session. Please try again.');
-    } finally {
-      setLoading(false);
-      setStatus('');
     }
   };
 

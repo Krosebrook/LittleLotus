@@ -1,35 +1,35 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { AppMode, ChatMessage } from '../types';
+import { ChatMessage } from '../types';
 import { chatWithBot } from '../services/geminiService';
 import { MessageCircle, Send, X, Bot, Mic, MicOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-
-interface ChatBotProps {
-  mode: AppMode;
-}
+import { useApp } from '../context/AppContext';
 
 /**
  * AI ChatBot component with voice input capabilities.
  * Adapts persona based on the AppMode (Kid vs Adult).
  */
-export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
-  const isKid = mode === AppMode.Kid;
+export const ChatBot: React.FC = () => {
+  const { isKid } = useApp();
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize welcome message when mode changes or on mount
+  useEffect(() => {
+    setMessages([{
       id: 'init',
       role: 'model',
       text: isKid 
         ? "Hi! I'm your mindfulness buddy. How are you feeling? 🌟" 
         : "Hello. I'm your mindfulness coach. How can I help you today?",
       timestamp: Date.now()
-    }
-  ]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+    }]);
+  }, [isKid]);
 
   const handleSpeechResult = useCallback((text: string) => {
     setInput(prev => {
@@ -47,7 +47,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ mode }) => {
     } else if (error === 'not-supported') {
       msg = 'Voice input not supported.';
     } else if (error === 'no-speech') {
-      // User didn't say anything, just reset silently or show prompt
+      // User didn't say anything, just reset silently
       return; 
     } else {
       msg = 'Error hearing voice.';

@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { AppMode, MeditationSession } from './types';
+import React, { useState } from 'react';
+import { AppProvider, useApp } from './context/AppContext';
 import { SessionBuilder } from './components/SessionBuilder';
 import { MeditationPlayer } from './components/MeditationPlayer';
 import { ChatBot } from './components/ChatBot';
@@ -8,50 +8,28 @@ import { NavBar } from './components/NavBar';
 import { Dashboard } from './components/Dashboard';
 import { Plus } from 'lucide-react';
 import { Button } from './components/Button';
-import { getAudioContext } from './utils/audio';
 
 /**
- * Main Application Controller.
- * Handles top-level state:
- * - AppMode (Kid/Adult)
- * - Navigation View State
- * - Active Sessions
- * - AudioContext Initialization
+ * Inner layout component that consumes the AppContext.
+ * Handles the main view routing (Dashboard <-> SessionBuilder).
  */
-const App: React.FC = () => {
-  const [mode, setMode] = useState<AppMode>(AppMode.Adult);
-  const [view, setView] = useState<'dashboard' | 'create' | 'history'>('dashboard');
-  const [sessions, setSessions] = useState<MeditationSession[]>([]);
-  const [activeSession, setActiveSession] = useState<MeditationSession | null>(null);
-  const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
+const AppLayout: React.FC = () => {
+  const { isKid, activeSession, setActiveSession } = useApp();
+  const [view, setView] = useState<'dashboard' | 'create'>('dashboard');
 
-  // Initialize AudioContext on first interaction to comply with browser autoplay policies
-  useEffect(() => {
-    const initAudio = () => {
-      if (!audioCtx) {
-        setAudioCtx(getAudioContext());
-      }
-    };
-    window.addEventListener('click', initAudio, { once: true });
-    return () => window.removeEventListener('click', initAudio);
-  }, [audioCtx]);
-
-  const handleSessionCreated = (session: MeditationSession) => {
-    setSessions(prev => [session, ...prev]);
-    setActiveSession(session);
-    setView('dashboard');
+  const handleCreateNew = () => {
+    setView('create');
   };
 
-  const isKid = mode === AppMode.Kid;
+  const handleSessionComplete = () => {
+    setView('dashboard');
+  };
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${isKid ? 'bg-sky-50 font-rounded' : 'bg-slate-50 font-sans'}`}>
       
       {/* Navigation Bar */}
-      <NavBar 
-        mode={mode} 
-        onToggleMode={() => setMode(mode === AppMode.Adult ? AppMode.Kid : AppMode.Adult)} 
-      />
+      <NavBar />
 
       {/* Main Content Area */}
       <main className="container mx-auto px-4 py-8 max-w-5xl pb-24">
@@ -71,7 +49,7 @@ const App: React.FC = () => {
             {view !== 'create' && (
               <Button 
                 variant={isKid ? 'kid' : 'primary'} 
-                onClick={() => setView('create')}
+                onClick={handleCreateNew}
                 className="py-3 px-6 text-lg"
               >
                 <Plus size={20} />
@@ -88,18 +66,9 @@ const App: React.FC = () => {
 
         {/* View Router */}
         {view === 'create' ? (
-          <SessionBuilder 
-            mode={mode} 
-            onSessionCreated={handleSessionCreated} 
-            audioContext={audioCtx || getAudioContext()} 
-          />
+          <SessionBuilder onComplete={handleSessionComplete} />
         ) : (
-          <Dashboard 
-            mode={mode}
-            sessions={sessions}
-            onSessionSelect={setActiveSession}
-            onCreateNew={() => setView('create')}
-          />
+          <Dashboard onCreateNew={handleCreateNew} />
         )}
       </main>
 
@@ -107,16 +76,26 @@ const App: React.FC = () => {
       {activeSession && (
         <MeditationPlayer 
           session={activeSession} 
-          mode={mode}
           onClose={() => setActiveSession(null)}
-          audioContext={audioCtx || getAudioContext()}
         />
       )}
 
       {/* Persistent Chat Bot */}
-      <ChatBot mode={mode} />
+      <ChatBot />
 
     </div>
+  );
+};
+
+/**
+ * Main Application Entry.
+ * Wraps the layout in the Context Provider.
+ */
+const App: React.FC = () => {
+  return (
+    <AppProvider>
+      <AppLayout />
+    </AppProvider>
   );
 };
 
