@@ -67,6 +67,7 @@ export const useSessionGenerator = ({ addSession, setActiveSession, audioContext
         visualStyle: formData.visualStyle,
         visualPrompt,
         imageUrl,
+        backgroundMusic: formData.backgroundMusic,
         audioBuffer,
         createdAt: Date.now()
       };

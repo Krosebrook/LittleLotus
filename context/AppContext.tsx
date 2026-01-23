@@ -7,6 +7,8 @@ interface AppContextType {
   mode: AppMode;
   isKid: boolean;
   toggleMode: () => void;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
   sessions: MeditationSession[];
   addSession: (session: MeditationSession) => void;
   activeSession: MeditationSession | null;
@@ -20,17 +22,43 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
  * Global Context Provider for the application.
  * Manages:
  * - Application Mode (Kid/Adult)
+ * - Dark Mode (Persistence & HTML Class)
  * - AudioContext Lifecycle (Unlocking on user interaction)
  * - Session Storage (In-memory)
  * - Active Playback Session
  */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [mode, setMode] = useState<AppMode>(AppMode.Adult);
+  
+  // Initialize dark mode from localStorage or system preference
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('MINDFUL_MATES_DARK_MODE');
+      if (saved !== null) return JSON.parse(saved);
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
   const [sessions, setSessions] = useState<MeditationSession[]>([]);
   const [activeSession, setActiveSession] = useState<MeditationSession | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
   const isKid = mode === AppMode.Kid;
+
+  // Apply dark mode class to HTML element
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('MINDFUL_MATES_DARK_MODE', JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
   /**
    * Initializes the AudioContext.
@@ -51,7 +79,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const handleInteraction = () => {
       initAudio();
-      // Remove listeners once successfully initialized
       window.removeEventListener('click', handleInteraction);
       window.removeEventListener('keydown', handleInteraction);
       window.removeEventListener('touchstart', handleInteraction);
@@ -81,6 +108,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       mode,
       isKid,
       toggleMode,
+      isDarkMode,
+      toggleDarkMode,
       sessions,
       addSession,
       activeSession,
@@ -92,10 +121,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
-/**
- * Custom hook to access the global application state.
- * @throws {Error} If used outside of an AppProvider.
- */
 export const useApp = () => {
   const context = useContext(AppContext);
   if (context === undefined) {

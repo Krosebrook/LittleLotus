@@ -38,6 +38,17 @@ export enum VoiceName {
 }
 
 /**
+ * Available background music genres for the meditation session.
+ */
+export enum MusicGenre {
+  TibetanBowls = 'Tibetan Bowls',
+  LoFi = 'Lo-fi',
+  AmbientSynth = 'Ambient Synth',
+  NatureSounds = 'Nature Sounds',
+  NoMusic = 'No Music'
+}
+
+/**
  * Represents a completely generated meditation session including all assets.
  */
 export interface MeditationSession {
@@ -53,6 +64,8 @@ export interface MeditationSession {
   duration: string; 
   /** Description of the visual style selected by the user */
   visualStyle: string;
+  /** Selected background music genre */
+  backgroundMusic?: MusicGenre;
   /** The AI-generated prompt used to create the background image */
   visualPrompt: string;
   /** Base64 data URL of the generated background image */
@@ -90,6 +103,8 @@ export interface SessionFormData {
   imageSize: ImageSize;
   /** The specific TTS voice persona to use */
   voice: VoiceName;
+  /** The background music preference */
+  backgroundMusic: MusicGenre;
   /** The requested length of the session */
   duration: string;
 }

@@ -26,7 +26,7 @@ const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${isKid ? 'bg-sky-50 font-rounded' : 'bg-slate-50 font-sans'}`}>
+    <div className={`min-h-screen transition-colors duration-500 ${isKid ? 'bg-sky-50 font-rounded' : 'bg-slate-50 dark:bg-slate-950 font-sans'}`}>
       
       {/* Navigation Bar */}
       <NavBar />
@@ -37,10 +37,10 @@ const AppLayout: React.FC = () => {
         {/* Header Section */}
         <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-4">
           <div>
-            <h1 className={`text-4xl font-bold mb-2 ${isKid ? 'text-slate-800' : 'text-slate-900'}`}>
+            <h1 className={`text-4xl font-bold mb-2 ${isKid ? 'text-slate-800' : 'text-slate-900 dark:text-white'}`}>
               {isKid ? "Welcome to your Calm Corner! 🎪" : "Good Afternoon."}
             </h1>
-            <p className="text-slate-500">
+            <p className="text-slate-500 dark:text-slate-400">
               {isKid ? "Let's find some magic today." : "Ready to find your center?"}
             </p>
           </div>
@@ -57,7 +57,7 @@ const AppLayout: React.FC = () => {
               </Button>
             )}
             {view !== 'dashboard' && (
-              <Button variant="ghost" onClick={() => setView('dashboard')}>
+              <Button variant="ghost" onClick={() => setView('dashboard')} className="dark:text-slate-300 dark:hover:bg-slate-800">
                 Cancel
               </Button>
             )}
