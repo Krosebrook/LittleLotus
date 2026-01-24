@@ -1,11 +1,12 @@
 
 import { MusicGenre } from "../types";
+import { audioBufferToWav } from "../utils/audio";
 
 /**
  * Creates a buffer of White Noise.
  * Used as a building block for Nature and Lo-fi sounds.
  */
-const createNoiseBuffer = (ctx: AudioContext): AudioBuffer => {
+const createNoiseBuffer = (ctx: BaseAudioContext): AudioBuffer => {
   const bufferSize = ctx.sampleRate * 2; // 2 seconds of noise
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const output = buffer.getChannelData(0);
@@ -15,20 +16,25 @@ const createNoiseBuffer = (ctx: AudioContext): AudioBuffer => {
   return buffer;
 };
 
+interface AmbienceController {
+  stop: () => void;
+  gainNode: GainNode;
+}
+
 /**
  * Plays a specific ambient soundscape based on the requested genre.
- * Returns a cleanup function to stop the sound.
+ * Returns a controller object to stop the sound or manipulate its gain.
  * 
- * @param ctx - The AudioContext to render audio in.
+ * @param ctx - The AudioContext (or OfflineAudioContext) to render audio in.
  * @param genre - The selected music genre.
  * @param destination - The destination node (usually a GainNode) to connect to.
- * @returns A function that stops and disconnects all nodes created.
+ * @returns {AmbienceController} Object containing stop function and the main gain node.
  */
 export const playAmbience = (
-  ctx: AudioContext, 
+  ctx: BaseAudioContext, 
   genre: MusicGenre, 
   destination: AudioNode
-): (() => void) => {
+): AmbienceController => {
   const nodes: AudioNode[] = [];
   const time = ctx.currentTime;
 
@@ -144,12 +150,16 @@ export const playAmbience = (
   gain.gain.linearRampToValueAtTime(originalGain, time + 2);
 
   // Return Cleanup Function
-  return () => {
+  const stop = () => {
+    // Check if context is closed/offline before trying to schedule params
+    if (ctx.state === 'closed') return;
+
     const stopTime = ctx.currentTime;
-    // Fade out
-    gain.gain.cancelScheduledValues(stopTime);
-    gain.gain.setValueAtTime(gain.gain.value, stopTime);
-    gain.gain.linearRampToValueAtTime(0, stopTime + 1);
+    try {
+        gain.gain.cancelScheduledValues(stopTime);
+        gain.gain.setValueAtTime(gain.gain.value, stopTime);
+        gain.gain.linearRampToValueAtTime(0, stopTime + 1);
+    } catch(e) { /* ignore if already stopped */ }
 
     setTimeout(() => {
       nodes.forEach(node => {
@@ -164,4 +174,52 @@ export const playAmbience = (
       });
     }, 1100);
   };
+
+  return { stop, gainNode: gain };
+};
+
+
+/**
+ * Renders the full session (voice + synthesized music) to a WAV blob.
+ */
+export const renderSessionToWav = async (
+    voiceBuffer: AudioBuffer,
+    musicGenre: MusicGenre,
+    musicVolume: number,
+    voiceVolume: number
+): Promise<Blob> => {
+    // Create Offline Context matching voice duration + tail
+    const duration = voiceBuffer.duration + 2; // +2s tail
+    const sampleRate = voiceBuffer.sampleRate;
+    const offlineCtx = new OfflineAudioContext(2, duration * sampleRate, sampleRate);
+
+    // 1. Setup Voice
+    const voiceSrc = offlineCtx.createBufferSource();
+    voiceSrc.buffer = voiceBuffer;
+    const voiceGain = offlineCtx.createGain();
+    voiceGain.gain.value = voiceVolume;
+    voiceSrc.connect(voiceGain);
+    voiceGain.connect(offlineCtx.destination);
+    voiceSrc.start(0);
+
+    // 2. Setup Music
+    if (musicGenre !== MusicGenre.NoMusic) {
+        // We use a gain node to apply the user's volume preference
+        const musicMasterGain = offlineCtx.createGain();
+        musicMasterGain.gain.value = musicVolume;
+        musicMasterGain.connect(offlineCtx.destination);
+        
+        // Play ambience into that gain
+        const { gainNode } = playAmbience(offlineCtx, musicGenre, musicMasterGain);
+        
+        // Schedule fade out at end of session
+        gainNode.gain.setValueAtTime(gainNode.gain.value, duration - 2);
+        gainNode.gain.linearRampToValueAtTime(0, duration);
+    }
+
+    // 3. Render
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    // 4. Encode to WAV
+    return audioBufferToWav(renderedBuffer);
 };

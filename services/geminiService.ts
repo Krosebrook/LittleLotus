@@ -8,15 +8,7 @@ import { buildMeditationScriptPrompt, getChatSystemInstruction } from "../utils/
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Generates a structured meditation script, title, and visual prompt based on user inputs.
- * Uses the `gemini-3-pro-preview` model to ensure high-quality reasoning and JSON adherence.
- * 
- * @param {string} ageGroup - The target age group (e.g., "Adult", "6-9").
- * @param {string} mood - The desired mood or goal of the session.
- * @param {string} visualStyle - The visual theme for the session.
- * @param {string} duration - The approximate duration ("Short" or "Long").
- * @returns {Promise<{ title: string; script: string; visualPrompt: string }>} A promise resolving to the generated content.
- * @throws {Error} If the model fails to generate valid text or JSON.
+ * Generates a structured meditation script, title, and visual prompt.
  */
 export const generateMeditationScript = async (
   ageGroup: string,
@@ -35,8 +27,8 @@ export const generateMeditationScript = async (
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING, description: "A calming or creative title" },
-          script: { type: Type.STRING, description: "The spoken meditation script" },
-          visualPrompt: { type: Type.STRING, description: "Prompt for image generation" }
+          script: { type: Type.STRING, description: "The spoken meditation script dialogue" },
+          visualPrompt: { type: Type.STRING, description: "Prompt for video generation" }
         },
         required: ["title", "script", "visualPrompt"]
       }
@@ -49,61 +41,74 @@ export const generateMeditationScript = async (
 };
 
 /**
- * Generates a background image for the meditation session using Gemini 3.0 Pro Image.
- * 
- * @param {string} prompt - The descriptive prompt generated in the previous step.
- * @param {ImageSize} size - The desired resolution (1K, 2K, 4K).
- * @returns {Promise<string>} The base64 data URL of the generated image (PNG format).
- * @throws {Error} If no image data is returned.
+ * Generates a video background using Veo 3.1.
  */
-export const generateMeditationImage = async (
-  prompt: string,
-  size: ImageSize
+export const generateMeditationVideo = async (
+  prompt: string
 ): Promise<string> => {
-  // Using gemini-3-pro-image-preview for high quality images
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
-    contents: {
-      parts: [{ text: prompt }]
-    },
+  let operation = await ai.models.generateVideos({
+    model: 'veo-3.1-fast-generate-preview',
+    prompt: prompt,
     config: {
-      imageConfig: {
-        aspectRatio: "1:1",
-        imageSize: size // 1K, 2K, or 4K
-      }
+      numberOfVideos: 1,
+      resolution: '720p',
+      aspectRatio: '1:1' 
     }
   });
 
-  for (const part of response.candidates?.[0]?.content?.parts || []) {
-    if (part.inlineData) {
-      return `data:image/png;base64,${part.inlineData.data}`;
+  // Poll for completion with timeout
+  const startTime = Date.now();
+  const MAX_WAIT_MS = 60000; // 60 seconds max wait
+
+  while (!operation.done) {
+    if (Date.now() - startTime > MAX_WAIT_MS) {
+        throw new Error("Video generation timed out.");
     }
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5s
+    operation = await ai.operations.getVideosOperation({operation: operation});
   }
-  throw new Error("No image generated.");
+
+  const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+  if (!videoUri) throw new Error("Video generation failed.");
+
+  // Append API Key to fetch the binary content
+  return `${videoUri}&key=${process.env.API_KEY}`;
 };
 
 /**
- * Generates audio speech from text using the `gemini-2.5-flash-preview-tts` model.
- * 
- * @param {string} text - The text script to be spoken.
- * @param {VoiceName} voiceName - The specific voice persona configuration.
- * @param {AudioContext} audioContext - The AudioContext used to decode the raw PCM data.
- * @returns {Promise<AudioBuffer>} The decoded AudioBuffer, ready for playback.
- * @throws {Error} If audio generation or decoding fails.
+ * Generates multi-speaker audio from text using `gemini-2.5-flash-preview-tts`.
  */
 export const generateMeditationAudio = async (
-  text: string,
-  voiceName: VoiceName,
+  script: string,
+  mainVoice: VoiceName,
   audioContext: AudioContext
 ): Promise<AudioBuffer> => {
+  // Determine secondary voice based on main voice to ensure contrast
+  const secondaryVoice = mainVoice === VoiceName.Puck ? VoiceName.Kore : VoiceName.Puck;
+
+  const prompt = `TTS the following conversation:\n${script}`;
+
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text }] }],
+    contents: [{ parts: [{ text: prompt }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName }
+        multiSpeakerVoiceConfig: {
+          speakerVoiceConfigs: [
+            {
+              speaker: 'Guide',
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: mainVoice } }
+            },
+            {
+              speaker: 'Buddy', // Used for Kid mode prompt
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: secondaryVoice } }
+            },
+            {
+              speaker: 'InnerSelf', // Used for Adult mode prompt
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: secondaryVoice } }
+            }
+          ]
         }
       }
     }
@@ -117,24 +122,21 @@ export const generateMeditationAudio = async (
 };
 
 /**
- * Sends a chat message to the Gemini bot and retrieves the response.
- * Uses a persistent history (passed from the client) to maintain context.
- * 
- * @param {string} message - The user's input message.
- * @param {{ role: 'user' | 'model'; text: string }[]} history - The conversation history.
- * @param {boolean} isKid - Whether to use the Kid-friendly system instruction.
- * @returns {Promise<string>} The model's text response.
+ * Sends a chat message to the Gemini bot with Search Grounding enabled.
  */
 export const chatWithBot = async (
   message: string,
   history: { role: 'user' | 'model'; text: string }[],
   isKid: boolean
-): Promise<string> => {
+): Promise<{ text: string; sources?: { title: string; uri: string }[] }> => {
   const systemInstruction = getChatSystemInstruction(isKid);
 
   const chat = ai.chats.create({
     model: 'gemini-3-pro-preview',
-    config: { systemInstruction },
+    config: { 
+      systemInstruction,
+      tools: [{ googleSearch: {} }] // Enable Search Grounding
+    },
     history: history.map(h => ({
       role: h.role,
       parts: [{ text: h.text }]
@@ -142,5 +144,21 @@ export const chatWithBot = async (
   });
 
   const result = await chat.sendMessage({ message });
-  return result.text || "I'm having a little trouble thinking right now. Let's take a deep breath.";
+  
+  // Extract grounding metadata
+  const sources: { title: string; uri: string }[] = [];
+  const chunks = result.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  
+  chunks.forEach(chunk => {
+    if (chunk.web) {
+      sources.push({ title: chunk.web.title || "Source", uri: chunk.web.uri || "#" });
+    }
+  });
+
+  return {
+    text: result.text || "I'm listening...",
+    sources: sources.length > 0 ? sources : undefined
+  };
 };
+
+export const geminiClient = ai;

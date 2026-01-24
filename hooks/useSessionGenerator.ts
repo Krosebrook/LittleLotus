@@ -1,7 +1,8 @@
 
-import { useState } from 'react';
-import { generateMeditationScript, generateMeditationImage, generateMeditationAudio } from '../services/geminiService';
-import { MeditationSession, SessionFormData } from '../types';
+import { useState, useRef, useEffect } from 'react';
+import { generateMeditationScript, generateMeditationVideo, generateMeditationAudio } from '../services/geminiService';
+import { MeditationSession, SessionFormData, ImageSize, VoiceName, MusicGenre } from '../types';
+import { MOODS, VISUAL_STYLES, VOICES, MUSIC_GENRES } from '../constants';
 
 interface UseSessionGeneratorProps {
   addSession: (session: MeditationSession) => void;
@@ -9,37 +10,24 @@ interface UseSessionGeneratorProps {
   audioContext: AudioContext | null;
 }
 
-/**
- * Custom hook to encapsulate the business logic for generating a full meditation session.
- * Orchestrates a sequence of 3 API calls:
- * 1. Generate Script (Text)
- * 2. Generate Image (Visual)
- * 3. Generate Audio (TTS)
- * 
- * Manages loading states and status messages for UI feedback.
- * 
- * @param {UseSessionGeneratorProps} props - Dependencies needed to save and play the session.
- * @returns {Object} Methods and state for the generation process.
- */
 export const useSessionGenerator = ({ addSession, setActiveSession, audioContext }: UseSessionGeneratorProps) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const isMounted = useRef(true);
 
-  /**
-   * Trigger the generation workflow.
-   * @param {SessionFormData} formData - The user's configuration for the session.
-   * @param {boolean} isKid - Whether to generate kid-appropriate content.
-   */
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
+
   const generateSession = async (formData: SessionFormData, isKid: boolean): Promise<void> => {
     if (!audioContext) {
       throw new Error("Audio context is not initialized. User interaction required.");
     }
 
     setLoading(true);
-    setStatus('Writing your meditation script...');
+    setStatus('Writing your meditation story...');
 
     try {
-      // Step 1: Generate the script using the LLM
       const { title, script, visualPrompt } = await generateMeditationScript(
         isKid ? "6-9" : "Adult",
         formData.mood,
@@ -47,17 +35,18 @@ export const useSessionGenerator = ({ addSession, setActiveSession, audioContext
         formData.duration
       );
 
-      setStatus('Painting your unique visual...');
+      if (!isMounted.current) return;
+      setStatus('Creating a magical video loop (this takes a moment)...');
       
-      // Step 2: Generate the background image based on the LLM's visual prompt
-      const imageUrl = await generateMeditationImage(visualPrompt, formData.imageSize);
+      const videoUrl = await generateMeditationVideo(visualPrompt);
 
-      setStatus('Recording the voiceover...');
+      if (!isMounted.current) return;
+      setStatus('Recording the voices...');
       
-      // Step 3: Generate the audio speech from the script
       const audioBuffer = await generateMeditationAudio(script, formData.voice, audioContext);
 
-      // Construct the final session object
+      if (!isMounted.current) return;
+
       const newSession: MeditationSession = {
         id: Date.now().toString(),
         title,
@@ -66,26 +55,55 @@ export const useSessionGenerator = ({ addSession, setActiveSession, audioContext
         duration: formData.duration,
         visualStyle: formData.visualStyle,
         visualPrompt,
-        imageUrl,
+        videoUrl,
         backgroundMusic: formData.backgroundMusic,
         audioBuffer,
         createdAt: Date.now()
       };
 
-      // Update global state
       addSession(newSession);
       setActiveSession(newSession);
     } catch (error) {
       console.error('Session generation failed:', error);
       throw error;
     } finally {
-      setLoading(false);
-      setStatus('');
+      if (isMounted.current) {
+        setLoading(false);
+        setStatus('');
+      }
     }
+  };
+
+  /**
+   * Generates a session with random parameters.
+   */
+  const surpriseMe = async (isKid: boolean) => {
+    const random = <T>(arr: T[] | Record<string, T[]>): T => {
+        const list = Array.isArray(arr) ? arr : (arr as any)[isKid ? 'KID' : 'ADULT']; // Fallback for Mode keyed constants if raw array passed
+        return list[Math.floor(Math.random() * list.length)];
+    }
+    
+    // Pick random constants appropriate for mode
+    const mood = MOODS[isKid ? 'KID' : 'ADULT'][Math.floor(Math.random() * MOODS[isKid ? 'KID' : 'ADULT'].length)];
+    const style = VISUAL_STYLES[isKid ? 'KID' : 'ADULT'][Math.floor(Math.random() * VISUAL_STYLES[isKid ? 'KID' : 'ADULT'].length)];
+    const voice = VOICES[isKid ? 'KID' : 'ADULT'][Math.floor(Math.random() * VOICES[isKid ? 'KID' : 'ADULT'].length)];
+    const music = MUSIC_GENRES[Math.floor(Math.random() * MUSIC_GENRES.length)];
+    
+    const randomData: SessionFormData = {
+        mood,
+        visualStyle: style,
+        voice,
+        backgroundMusic: music,
+        duration: 'Short',
+        imageSize: ImageSize.Size_1K
+    };
+    
+    await generateSession(randomData, isKid);
   };
 
   return {
     generateSession,
+    surpriseMe,
     loading,
     status
   };

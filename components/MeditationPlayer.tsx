@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { MeditationSession, MusicGenre } from '../types';
-import { X, Wind, Star, Send } from 'lucide-react';
+import { X, Wind, Star, Download, Check } from 'lucide-react';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { useApp } from '../context/AppContext';
 import { KidControls, AdultControls } from './PlayerControls';
-import { playAmbience } from '../services/audioSynthesizer';
+import { playAmbience, renderSessionToWav } from '../services/audioSynthesizer';
 import { Button } from './Button';
 
 interface MeditationPlayerProps {
@@ -13,98 +13,153 @@ interface MeditationPlayerProps {
   onClose: () => void;
 }
 
-const BreathingBubble: React.FC = () => {
-  const [phase, setPhase] = useState<'in' | 'out'>('in');
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPhase(p => p === 'in' ? 'out' : 'in');
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+// Visualizer Component
+const AudioVisualizer: React.FC<{ analyser: React.MutableRefObject<AnalyserNode | null> }> = ({ analyser }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-1000">
-      <div 
-        className={`
-          relative flex items-center justify-center rounded-full transition-all duration-[4000ms] ease-in-out
-          ${phase === 'in' ? 'w-72 h-72 scale-110 opacity-100' : 'w-40 h-40 scale-100 opacity-80'}
-          bg-gradient-to-br from-kid-primary to-kid-accent shadow-[0_0_80px_rgba(255,255,255,0.5)] border-4 border-white/60
-        `}
-      >
-        <div className="text-white font-bold text-3xl font-rounded drop-shadow-lg text-center animate-pulse">
-          {phase === 'in' ? 'Breathe In... 🌸' : 'Breathe Out... 🌬️'}
-        </div>
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !analyser.current) return;
         
-        <div className={`absolute inset-0 rounded-full border-2 border-white/40 transition-all duration-[4000ms] ease-out ${phase === 'in' ? 'scale-150 opacity-0' : 'scale-100 opacity-50'}`} />
-        <div className={`absolute inset-0 rounded-full border-2 border-white/20 transition-all duration-[4000ms] ease-out delay-100 ${phase === 'in' ? 'scale-[2] opacity-0' : 'scale-100 opacity-40'}`} />
-      </div>
-    </div>
-  );
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const bufferLength = analyser.current.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        let animationId: number;
+
+        const draw = () => {
+            animationId = requestAnimationFrame(draw);
+            analyser.current?.getByteFrequencyData(dataArray);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight;
+            let x = 0;
+
+            for(let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] / 2;
+                // Gradient color
+                const r = barHeight + 25 * (i/bufferLength);
+                const g = 250 * (i/bufferLength);
+                const b = 50;
+
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
+            }
+        };
+
+        draw();
+
+        return () => cancelAnimationFrame(animationId);
+    }, [analyser]);
+
+    return <canvas ref={canvasRef} className="absolute bottom-0 left-0 w-full h-32 opacity-50 pointer-events-none" width={600} height={100} />;
 };
 
 export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onClose }) => {
   const { isKid, audioContext } = useApp();
   const [showBreathing, setShowBreathing] = useState(isKid);
   const [showFeedback, setShowFeedback] = useState(false);
+  
+  // Audio state
+  const { isPlaying, progress, duration, togglePlay, seek, restart, volume, setVolume, analyser } = useAudioPlayer(audioContext!, session.audioBuffer);
+  const [musicVolume, setMusicVolume] = useState(0.3); // Default music volume
+
+  // Ambience refs
   const ambienceCleanupRef = useRef<(() => void) | null>(null);
   const ambienceGainRef = useRef<GainNode | null>(null);
   
-  if (!audioContext) return null;
+  // Export state
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportComplete, setExportComplete] = useState(false);
 
-  const { isPlaying, progress, duration, togglePlay, seek, restart, volume, setVolume } = useAudioPlayer(audioContext, session.audioBuffer);
+  if (!audioContext) return null;
 
   // Background Ambience Logic
   useEffect(() => {
     const ambienceGain = audioContext.createGain();
     ambienceGain.connect(audioContext.destination);
     ambienceGainRef.current = ambienceGain;
-    ambienceGain.gain.value = volume * 0.3;
+    // Initialize with music volume state
+    ambienceGain.gain.value = musicVolume;
 
     return () => {
       if (ambienceCleanupRef.current) ambienceCleanupRef.current();
       ambienceGain.disconnect();
     };
-  }, [audioContext]);
+  }, [audioContext]); // Run once on mount (or if ctx changes)
 
+  // Toggle ambience play/stop based on main playback
   useEffect(() => {
     if (!audioContext || !ambienceGainRef.current) return;
 
     if (isPlaying && !ambienceCleanupRef.current && session.backgroundMusic && session.backgroundMusic !== MusicGenre.NoMusic) {
-      ambienceCleanupRef.current = playAmbience(audioContext, session.backgroundMusic, ambienceGainRef.current);
+      // playAmbience returns { stop, gainNode }
+      // We pass the master ambience gain (ambienceGainRef) as destination
+      const { stop } = playAmbience(audioContext, session.backgroundMusic, ambienceGainRef.current);
+      ambienceCleanupRef.current = stop;
     } else if (!isPlaying && ambienceCleanupRef.current) {
       ambienceCleanupRef.current();
       ambienceCleanupRef.current = null;
     }
   }, [isPlaying, audioContext, session.backgroundMusic]);
 
+  // Update Music Volume
   useEffect(() => {
     if (ambienceGainRef.current) {
-      ambienceGainRef.current.gain.setTargetAtTime(volume * 0.3, audioContext.currentTime, 0.1);
+      // Smoothly transition volume
+      ambienceGainRef.current.gain.setTargetAtTime(musicVolume, audioContext.currentTime, 0.1);
     }
-  }, [volume, audioContext]);
+  }, [musicVolume, audioContext]);
 
   // Handle Close Attempt
   const handleCloseRequest = () => {
-    // If user listened to less than 15 seconds, just close.
-    // Otherwise, ask for feedback.
     if (progress < 15 && !showFeedback) {
       onClose();
     } else {
       setShowFeedback(true);
-      // Pause playback when showing feedback
       if (isPlaying) togglePlay();
     }
   };
 
+  const handleExport = async () => {
+    if (!session.audioBuffer) return;
+    setIsExporting(true);
+    try {
+        const blob = await renderSessionToWav(
+            session.audioBuffer, 
+            session.backgroundMusic || MusicGenre.NoMusic, 
+            musicVolume, 
+            volume
+        );
+        
+        // Trigger download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mindful-mates-${session.title.replace(/\s+/g, '-').toLowerCase()}.wav`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        setExportComplete(true);
+        setTimeout(() => setExportComplete(false), 3000);
+    } catch (e) {
+        console.error("Export failed", e);
+        alert("Failed to export audio.");
+    } finally {
+        setIsExporting(false);
+    }
+  };
+
   const [rating, setRating] = useState(0);
-  const [feedbackText, setFeedbackText] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmitFeedback = () => {
     setSubmitted(true);
-    // In a real app, send to backend here.
-    console.log("Feedback sent:", { rating, feedbackText, session: session.id });
     setTimeout(() => onClose(), 1500);
   };
 
@@ -117,10 +172,6 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
               <h2 className={`text-2xl font-bold mb-4 ${isKid ? 'text-kid-primary' : 'text-white'}`}>
                 {isKid ? "Did you like it? 🌟" : "Session Complete"}
               </h2>
-              <p className={`mb-6 ${isKid ? 'text-slate-600' : 'text-slate-400'}`}>
-                {isKid ? "How many stars for this magic story?" : "Your feedback helps improve future sessions."}
-              </p>
-              
               <div className="flex justify-center gap-2 mb-6">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
@@ -132,16 +183,6 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
                   </button>
                 ))}
               </div>
-
-              {!isKid && (
-                <textarea
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Any thoughts on the voice or script?"
-                  className="w-full p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 mb-6 focus:ring-2 focus:ring-indigo-500 outline-none resize-none h-24 text-slate-900 dark:text-slate-100"
-                />
-              )}
-
               <div className="flex gap-4 justify-center">
                  <Button variant="ghost" onClick={onClose}>Skip</Button>
                  <Button variant={isKid ? 'kid' : 'primary'} onClick={handleSubmitFeedback} disabled={rating === 0}>
@@ -151,13 +192,9 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
             </>
           ) : (
             <div className="py-8 animate-in fade-in slide-in-from-bottom-4">
-              <div className="mx-auto w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
-                <Send size={32} />
-              </div>
               <h3 className={`text-xl font-bold ${isKid ? 'text-kid-primary' : 'text-white'}`}>
                 {isKid ? "Thanks, you're awesome! 🎉" : "Feedback Received"}
               </h3>
-              <p className="text-slate-500 mt-2">Closing session...</p>
             </div>
           )}
         </div>
@@ -176,17 +213,35 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
           <X size={24} />
         </button>
 
-        {/* Visual Side */}
+        {/* Visual Side (Video) */}
         <div className="w-full md:w-1/2 h-1/2 md:h-full relative bg-black group overflow-hidden">
-          {session.imageUrl && (
+          {session.videoUrl ? (
+            <video 
+              src={session.videoUrl} 
+              autoPlay 
+              loop 
+              muted 
+              playsInline
+              className="w-full h-full object-cover opacity-90"
+            />
+          ) : session.imageUrl ? (
             <img 
               src={session.imageUrl} 
               alt={session.visualPrompt} 
               className="w-full h-full object-cover opacity-90 transition-transform duration-[20s] ease-linear hover:scale-110"
             />
+          ) : (
+            <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white">No Visual</div>
           )}
           
-          {showBreathing && <BreathingBubble />}
+          {/* Audio Visualizer Overlay */}
+          <AudioVisualizer analyser={analyser} />
+
+          {isKid && showBreathing && (
+             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                 <div className="w-48 h-48 rounded-full bg-white/20 animate-ping" />
+             </div>
+          )}
 
           {isKid && (
             <button
@@ -209,10 +264,9 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
 
         {/* Controls Side */}
         <div className={`w-full md:w-1/2 h-1/2 md:h-full flex flex-col p-8 ${isKid ? 'bg-amber-50' : 'bg-white dark:bg-slate-900'}`}>
-           
            <div className="flex-1 overflow-y-auto mb-6 pr-2 scrollbar-hide">
              <h3 className={`text-lg font-bold mb-4 ${isKid ? 'text-amber-800 font-rounded' : 'text-slate-800 dark:text-white'}`}>Transcript</h3>
-             <p className={`text-lg leading-relaxed ${isKid ? 'text-slate-700 font-rounded' : 'text-slate-600 dark:text-slate-300'}`}>
+             <p className={`text-lg leading-relaxed whitespace-pre-wrap ${isKid ? 'text-slate-700 font-rounded' : 'text-slate-600 dark:text-slate-300'}`}>
                {session.script}
              </p>
            </div>
@@ -230,7 +284,11 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
                  isPlaying={isPlaying} 
                  onTogglePlay={togglePlay} 
                  onRestart={restart} 
-                 onSeek={seek} 
+                 onSeek={seek}
+                 volume={volume}
+                 onVolumeChange={setVolume}
+                 musicVolume={musicVolume}
+                 onMusicVolumeChange={setMusicVolume}
                />
              ) : (
                <AdultControls 
@@ -239,11 +297,30 @@ export const MeditationPlayer: React.FC<MeditationPlayerProps> = ({ session, onC
                  onRestart={restart}
                  volume={volume}
                  onVolumeChange={setVolume}
+                 musicVolume={musicVolume}
+                 onMusicVolumeChange={setMusicVolume}
                />
              )}
+             
+             {/* Download/Export Button */}
+             <div className="mt-4 flex justify-center">
+                <Button 
+                    variant="ghost" 
+                    onClick={handleExport} 
+                    disabled={isExporting}
+                    className="text-xs text-slate-400 hover:text-indigo-600"
+                >
+                    {isExporting ? (
+                         <span className="animate-pulse">Rendering Audio...</span>
+                    ) : exportComplete ? (
+                        <><Check size={14} className="text-green-500" /> Exported!</>
+                    ) : (
+                        <><Download size={14} /> Download Session (WAV)</>
+                    )}
+                </Button>
+             </div>
            </div>
         </div>
-
       </div>
     </div>
   );

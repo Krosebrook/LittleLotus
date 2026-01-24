@@ -20,17 +20,11 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 /**
  * Global Context Provider for the application.
- * Manages:
- * - Application Mode (Kid/Adult)
- * - Dark Mode (Persistence & HTML Class)
- * - AudioContext Lifecycle (Unlocking on user interaction)
- * - Session Storage (In-memory)
- * - Active Playback Session
  */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [mode, setMode] = useState<AppMode>(AppMode.Adult);
   
-  // Initialize dark mode from localStorage or system preference
+  // Initialize dark mode
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('MINDFUL_MATES_DARK_MODE');
@@ -41,13 +35,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   });
 
-  const [sessions, setSessions] = useState<MeditationSession[]>([]);
+  // Initialize sessions from local storage
+  const [sessions, setSessions] = useState<MeditationSession[]>(() => {
+    try {
+      const saved = localStorage.getItem('MINDFUL_MATES_SESSIONS');
+      if (saved) {
+        // Note: AudioBuffers cannot be stringified. Persisted sessions will strictly be
+        // for history/display unless we re-synthesize or cache audio blobs (advanced).
+        // For now, we accept that reloaded sessions might need regeneration of audio or 
+        // will just show metadata. 
+        // *Improvement*: Filter out sessions without audio support or indicate they are archived.
+        return JSON.parse(saved);
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
   const [activeSession, setActiveSession] = useState<MeditationSession | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
   const isKid = mode === AppMode.Kid;
 
-  // Apply dark mode class to HTML element
+  // Persist Dark Mode
   useEffect(() => {
     const root = window.document.documentElement;
     if (isDarkMode) {
@@ -58,13 +69,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('MINDFUL_MATES_DARK_MODE', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  // Persist Sessions (excluding heavy buffers to avoid quota limits)
+  useEffect(() => {
+    const sessionsToSave = sessions.map(s => {
+      // Strip audioBuffer and non-serializable fields for storage
+      const { audioBuffer, ...rest } = s;
+      return rest;
+    });
+    localStorage.setItem('MINDFUL_MATES_SESSIONS', JSON.stringify(sessionsToSave));
+  }, [sessions]);
+
   const toggleDarkMode = () => setIsDarkMode(prev => !prev);
 
-  /**
-   * Initializes the AudioContext.
-   * Browsers require a user gesture (click, touch, keydown) to unlock the AudioContext.
-   * We listen for the first interaction to create and resume the context.
-   */
   useEffect(() => {
     const initAudio = () => {
       if (!audioContext) {

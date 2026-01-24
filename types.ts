@@ -68,8 +68,10 @@ export interface MeditationSession {
   backgroundMusic?: MusicGenre;
   /** The AI-generated prompt used to create the background image */
   visualPrompt: string;
-  /** Base64 data URL of the generated background image */
+  /** Base64 data URL of the generated background image (Legacy/Fallback) */
   imageUrl?: string;
+  /** URL of the generated background video (Veo) */
+  videoUrl?: string;
   /** Decoded AudioBuffer ready for playback via Web Audio API */
   audioBuffer?: AudioBuffer;
   /** Timestamp of creation in milliseconds */
@@ -88,6 +90,8 @@ export interface ChatMessage {
   text: string;
   /** Timestamp of the message */
   timestamp: number;
+  /** Optional list of sources for grounded answers */
+  sources?: { title: string; uri: string }[];
 }
 
 /**
